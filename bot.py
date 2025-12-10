@@ -1,7 +1,7 @@
 """Telegram-бот для игры 'Тайный Санта'."""
 import random
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -357,6 +357,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         help_text += "🔹 /assign - Запустить распределение участников\n"
         help_text += "🔹 /export - Выгрузить таблицу участников и подарков\n"
         help_text += "🔹 /status - Показать общий статус игры\n"
+        help_text += "🔹 /reset_assignments - Сбросить распределение (начать заново)\n"
+        help_text += "🔹 /reset - Полный сброс (удалить всех участников)\n"
     
     help_text += "\n\n💡 Подсказка: Используй команды с символом / в начале сообщения."
     
@@ -445,7 +447,9 @@ async def help_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "👑 АДМИНИСТРАТОРСКИЕ КОМАНДЫ:\n\n"
                 "🔹 /assign - Запустить распределение участников\n"
                 "🔹 /export - Выгрузить таблицу участников и подарков\n"
-                "🔹 /status - Показать общий статус игры\n\n"
+                "🔹 /status - Показать общий статус игры\n"
+                "🔹 /reset_assignments - Сбросить распределение (начать заново)\n"
+                "🔹 /reset - Полный сброс (удалить всех участников)\n\n"
                 "Используй эти команды для управления игрой."
             )
         else:
@@ -453,10 +457,101 @@ async def help_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text)
 
 
+async def reset_assignments(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Административная команда для сброса распределения (начать заново)."""
+    user = update.effective_user
+    
+    # Проверка прав администратора
+    if user.id != ADMIN_USER_ID:
+        await update.message.reply_text("❌ У тебя нет прав для выполнения этой команды.")
+        return
+    
+    # Сбросить флаг распределения и очистить распределения
+    db.clear_assignments()
+    db.reset_assignment_flag()
+    
+    participant_count = db.get_participant_count()
+    
+    await update.message.reply_text(
+        f"✅ Распределение сброшено!\n\n"
+        f"Участников осталось: {participant_count}\n"
+        f"Теперь можно запустить новое распределение командой /assign"
+    )
+
+
+async def reset_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Административная команда для полного сброса (удалить всех участников)."""
+    user = update.effective_user
+    
+    # Проверка прав администратора
+    if user.id != ADMIN_USER_ID:
+        await update.message.reply_text("❌ У тебя нет прав для выполнения этой команды.")
+        return
+    
+    # Подтверждение через кнопку
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Да, сбросить всё", callback_data="reset_confirm"),
+            InlineKeyboardButton("❌ Отмена", callback_data="reset_cancel"),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    participant_count = db.get_participant_count()
+    
+    await update.message.reply_text(
+        f"⚠️ ВНИМАНИЕ! Полный сброс удалит:\n\n"
+        f"• Всех участников ({participant_count})\n"
+        f"• Все распределения\n"
+        f"• Все настройки\n\n"
+        f"Это действие нельзя отменить!\n\n"
+        f"Подтверди сброс:",
+        reply_markup=reply_markup
+    )
+
+
+async def reset_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик кнопок подтверждения сброса."""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    
+    # Проверка прав администратора
+    if user.id != ADMIN_USER_ID:
+        await query.edit_message_text("❌ У тебя нет прав для выполнения этой команды.")
+        return
+    
+    if query.data == "reset_confirm":
+        # Полный сброс
+        db.reset_all()
+        await query.edit_message_text(
+            "✅ Полный сброс выполнен!\n\n"
+            "Все участники, распределения и настройки удалены.\n"
+            "Игра готова к новому запуску."
+        )
+    elif query.data == "reset_cancel":
+        await query.edit_message_text("❌ Сброс отменён.")
+
+
+async def post_init(application: Application) -> None:
+    """Установить команды меню бота."""
+    commands = [
+        BotCommand("start", "Начать работу с ботом"),
+        BotCommand("about", "Описание игры и правил"),
+        BotCommand("register", "Зарегистрироваться в игре"),
+        BotCommand("status", "Показать статус регистрации"),
+        BotCommand("help", "Показать меню с командами"),
+        BotCommand("cancel", "Отменить текущую регистрацию"),
+    ]
+    await application.bot.set_my_commands(commands)
+    logger.info("Команды меню установлены")
+
+
 def main():
     """Запуск бота."""
     # Создать приложение
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     
     # Обработчик регистрации
     register_handler = ConversationHandler(
@@ -477,7 +572,10 @@ def main():
     application.add_handler(CommandHandler("assign", assign))
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CommandHandler("export", export))
+    application.add_handler(CommandHandler("reset_assignments", reset_assignments))
+    application.add_handler(CommandHandler("reset", reset_all))
     application.add_handler(CallbackQueryHandler(help_button, pattern="^help_"))
+    application.add_handler(CallbackQueryHandler(reset_button, pattern="^reset_"))
     
     # Запустить бота (long polling)
     logger.info("Бот запущен...")

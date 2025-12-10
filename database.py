@@ -180,4 +180,30 @@ class Database:
         if row:
             return dict(row)
         return None
+    
+    def clear_all_participants(self):
+        """Очистить всех участников."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM participants")
+        conn.commit()
+        conn.close()
+    
+    def reset_assignment_flag(self):
+        """Сбросить флаг выполнения распределения."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM settings WHERE key = 'assignment_done'")
+        conn.commit()
+        conn.close()
+    
+    def reset_all(self):
+        """Полный сброс: очистить всех участников, распределения и настройки."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM participants")
+        cursor.execute("DELETE FROM assignments")
+        cursor.execute("DELETE FROM settings")
+        conn.commit()
+        conn.close()
 

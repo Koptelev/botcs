@@ -344,48 +344,48 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_admin = user.id == ADMIN_USER_ID
         
         help_text = "📚 МЕНЮ КОМАНД\n\n"
-    help_text += "Доступные команды:\n\n"
-    
-    help_text += "🔹 /start - Начать работу с ботом\n"
-    help_text += "🔹 /about - Описание игры и правил\n"
-    help_text += "🔹 /register - Зарегистрироваться в игре\n"
-    help_text += "🔹 /status - Показать статус регистрации\n"
-    help_text += "🔹 /help - Показать это меню\n"
-    help_text += "🔹 /cancel - Отменить текущую регистрацию\n"
-    
-    if is_admin:
-        help_text += "\n\n👑 АДМИНИСТРАТОРСКИЕ КОМАНДЫ:\n\n"
-        help_text += "🔹 /assign - Запустить распределение участников\n"
-        help_text += "🔹 /export - Выгрузить таблицу участников и подарков\n"
-        help_text += "🔹 /status - Показать общий статус игры\n"
-        help_text += "🔹 /reset_assignments - Сбросить распределение (начать заново)\n"
-        help_text += "🔹 /reset - Полный сброс (удалить всех участников)\n"
-    
-    help_text += "\n\n💡 Подсказка: Используй команды с символом / в начале сообщения."
-    
-    # Создаём inline клавиатуру для быстрого доступа
-    keyboard = []
-    
-    # Первая строка кнопок
-    keyboard.append([
-        InlineKeyboardButton("📖 О игре", callback_data="help_about"),
-        InlineKeyboardButton("📝 Регистрация", callback_data="help_register"),
-    ])
-    
-    # Вторая строка кнопок
-    keyboard.append([
-        InlineKeyboardButton("📊 Мой статус", callback_data="help_status"),
-    ])
-    
-    if is_admin:
-        # Третья строка для админа
+        help_text += "Доступные команды:\n\n"
+        
+        help_text += "🔹 /start - Начать работу с ботом\n"
+        help_text += "🔹 /about - Описание игры и правил\n"
+        help_text += "🔹 /register - Зарегистрироваться в игре\n"
+        help_text += "🔹 /status - Показать статус регистрации\n"
+        help_text += "🔹 /help - Показать это меню\n"
+        help_text += "🔹 /cancel - Отменить текущую регистрацию\n"
+        
+        if is_admin:
+            help_text += "\n\n👑 АДМИНИСТРАТОРСКИЕ КОМАНДЫ:\n\n"
+            help_text += "🔹 /assign - Запустить распределение участников\n"
+            help_text += "🔹 /export - Выгрузить таблицу участников и подарков\n"
+            help_text += "🔹 /status - Показать общий статус игры\n"
+            help_text += "🔹 /reset_assignments - Сбросить распределение (начать заново)\n"
+            help_text += "🔹 /reset - Полный сброс (удалить всех участников)\n"
+        
+        help_text += "\n\n💡 Подсказка: Используй команды с символом / в начале сообщения."
+        
+        # Создаём inline клавиатуру для быстрого доступа
+        keyboard = []
+        
+        # Первая строка кнопок
         keyboard.append([
-            InlineKeyboardButton("👑 Админ-панель", callback_data="help_admin"),
+            InlineKeyboardButton("📖 О игре", callback_data="help_about"),
+            InlineKeyboardButton("📝 Регистрация", callback_data="help_register"),
         ])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(help_text, reply_markup=reply_markup)
+        
+        # Вторая строка кнопок
+        keyboard.append([
+            InlineKeyboardButton("📊 Мой статус", callback_data="help_status"),
+        ])
+        
+        if is_admin:
+            # Третья строка для админа
+            keyboard.append([
+                InlineKeyboardButton("👑 Админ-панель", callback_data="help_admin"),
+            ])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(help_text, reply_markup=reply_markup)
     except Exception as e:
         logger.error(f"Ошибка в help_command: {e}")
         await update.message.reply_text("Произошла ошибка. Попробуйте позже.")
@@ -493,26 +493,26 @@ async def reset_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user.id != ADMIN_USER_ID:
             await update.message.reply_text("❌ У тебя нет прав для выполнения этой команды.")
             return
-    
-    # Подтверждение через кнопку
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ Да, сбросить всё", callback_data="reset_confirm"),
-            InlineKeyboardButton("❌ Отмена", callback_data="reset_cancel"),
+        
+        # Подтверждение через кнопку
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Да, сбросить всё", callback_data="reset_confirm"),
+                InlineKeyboardButton("❌ Отмена", callback_data="reset_cancel"),
+            ]
         ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    participant_count = db.get_participant_count()
-    
-    await update.message.reply_text(
-        f"⚠️ ВНИМАНИЕ! Полный сброс удалит:\n\n"
-        f"• Всех участников ({participant_count})\n"
-        f"• Все распределения\n"
-        f"• Все настройки\n\n"
-        f"Это действие нельзя отменить!\n\n"
-        f"Подтверди сброс:",
-        reply_markup=reply_markup
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        participant_count = db.get_participant_count()
+        
+        await update.message.reply_text(
+            f"⚠️ ВНИМАНИЕ! Полный сброс удалит:\n\n"
+            f"• Всех участников ({participant_count})\n"
+            f"• Все распределения\n"
+            f"• Все настройки\n\n"
+            f"Это действие нельзя отменить!\n\n"
+            f"Подтверди сброс:",
+            reply_markup=reply_markup
         )
     except Exception as e:
         logger.error(f"Ошибка в reset_all: {e}")

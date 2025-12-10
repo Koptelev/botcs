@@ -339,10 +339,11 @@ async def export(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать меню помощи с командами."""
-    user = update.effective_user
-    is_admin = user.id == ADMIN_USER_ID
-    
-    help_text = "📚 МЕНЮ КОМАНД\n\n"
+    try:
+        user = update.effective_user
+        is_admin = user.id == ADMIN_USER_ID
+        
+        help_text = "📚 МЕНЮ КОМАНД\n\n"
     help_text += "Доступные команды:\n\n"
     
     help_text += "🔹 /start - Начать работу с ботом\n"
@@ -385,6 +386,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(help_text, reply_markup=reply_markup)
+    except Exception as e:
+        logger.error(f"Ошибка в help_command: {e}")
+        await update.message.reply_text("Произошла ошибка. Попробуйте позже.")
 
 
 async def help_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -481,12 +485,14 @@ async def reset_assignments(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def reset_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Административная команда для полного сброса (удалить всех участников)."""
-    user = update.effective_user
-    
-    # Проверка прав администратора
-    if user.id != ADMIN_USER_ID:
-        await update.message.reply_text("❌ У тебя нет прав для выполнения этой команды.")
-        return
+    try:
+        user = update.effective_user
+        logger.info(f"Команда /reset вызвана пользователем {user.id} ({user.username})")
+        
+        # Проверка прав администратора
+        if user.id != ADMIN_USER_ID:
+            await update.message.reply_text("❌ У тебя нет прав для выполнения этой команды.")
+            return
     
     # Подтверждение через кнопку
     keyboard = [
@@ -507,7 +513,10 @@ async def reset_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Это действие нельзя отменить!\n\n"
         f"Подтверди сброс:",
         reply_markup=reply_markup
-    )
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в reset_all: {e}")
+        await update.message.reply_text("Произошла ошибка. Попробуйте позже.")
 
 
 async def reset_button(update: Update, context: ContextTypes.DEFAULT_TYPE):

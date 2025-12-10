@@ -1,7 +1,7 @@
 """Telegram-бот для игры 'Тайный Санта'."""
 import random
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -9,6 +9,7 @@ from telegram.ext import (
     ConversationHandler,
     filters,
     ContextTypes,
+    CallbackQueryHandler,
 )
 from config import BOT_TOKEN, ADMIN_USER_ID
 from database import Database
@@ -276,6 +277,181 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 
+async def export(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Административная команда для выгрузки таблицы участников."""
+    user = update.effective_user
+    
+    # Проверка прав администратора
+    if user.id != ADMIN_USER_ID:
+        await update.message.reply_text("❌ У тебя нет прав для выполнения этой команды.")
+        return
+    
+    participants = db.get_all_participants()
+    
+    if not participants:
+        await update.message.reply_text("❌ Нет зарегистрированных участников.")
+        return
+    
+    # Формируем таблицу
+    table_text = "📋 ВЫГРУЗКА УЧАСТНИКОВ\n\n"
+    table_text += "┌" + "─" * 58 + "┐\n"
+    table_text += f"│ {'№':<3} │ {'ФИО':<25} │ {'Желаемый подарок':<25} │\n"
+    table_text += "├" + "─" * 58 + "┤\n"
+    
+    for idx, p in enumerate(participants, 1):
+        full_name = p['full_name'][:24] if len(p['full_name']) > 24 else p['full_name']
+        wish = p['wish'][:24] if len(p['wish']) > 24 else p['wish']
+        table_text += f"│ {idx:<3} │ {full_name:<25} │ {wish:<25} │\n"
+    
+    table_text += "└" + "─" * 58 + "┘\n"
+    table_text += f"\n📊 Всего участников: {len(participants)}\n"
+    
+    # Если распределение выполнено, добавляем информацию о парах
+    if db.is_assignment_done():
+        table_text += "\n\n🎁 РАСПРЕДЕЛЕНИЕ ПОДАРКОВ:\n"
+        table_text += "┌" + "─" * 58 + "┐\n"
+        table_text += f"│ {'Даритель':<28} │ {'Получатель':<28} │\n"
+        table_text += "├" + "─" * 58 + "┤\n"
+        
+        for p in participants:
+            assignment = db.get_assignment(p['user_id'])
+            if assignment:
+                giver_name = p['full_name'][:27] if len(p['full_name']) > 27 else p['full_name']
+                receiver_name = assignment['full_name'][:27] if len(assignment['full_name']) > 27 else assignment['full_name']
+                table_text += f"│ {giver_name:<28} │ {receiver_name:<28} │\n"
+        
+        table_text += "└" + "─" * 58 + "┘\n"
+    
+    # Отправляем таблицу (разбиваем на части, если слишком длинная)
+    max_length = 4096  # Максимальная длина сообщения в Telegram
+    if len(table_text) <= max_length:
+        await update.message.reply_text(f"<pre>{table_text}</pre>", parse_mode="HTML")
+    else:
+        # Отправляем первую часть
+        first_part = table_text[:max_length]
+        await update.message.reply_text(f"<pre>{first_part}</pre>", parse_mode="HTML")
+        # Отправляем вторую часть, если есть
+        if len(table_text) > max_length:
+            second_part = table_text[max_length:]
+            await update.message.reply_text(f"<pre>{second_part}</pre>", parse_mode="HTML")
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать меню помощи с командами."""
+    user = update.effective_user
+    is_admin = user.id == ADMIN_USER_ID
+    
+    help_text = "📚 МЕНЮ КОМАНД\n\n"
+    help_text += "Доступные команды:\n\n"
+    
+    help_text += "🔹 /start - Начать работу с ботом\n"
+    help_text += "🔹 /about - Описание игры и правил\n"
+    help_text += "🔹 /register - Зарегистрироваться в игре\n"
+    help_text += "🔹 /status - Показать статус регистрации\n"
+    help_text += "🔹 /help - Показать это меню\n"
+    help_text += "🔹 /cancel - Отменить текущую регистрацию\n"
+    
+    if is_admin:
+        help_text += "\n\n👑 АДМИНИСТРАТОРСКИЕ КОМАНДЫ:\n\n"
+        help_text += "🔹 /assign - Запустить распределение участников\n"
+        help_text += "🔹 /export - Выгрузить таблицу участников и подарков\n"
+        help_text += "🔹 /status - Показать общий статус игры\n"
+    
+    help_text += "\n\n💡 Подсказка: Используй команды с символом / в начале сообщения."
+    
+    # Создаём inline клавиатуру для быстрого доступа
+    keyboard = []
+    
+    # Первая строка кнопок
+    keyboard.append([
+        InlineKeyboardButton("📖 О игре", callback_data="help_about"),
+        InlineKeyboardButton("📝 Регистрация", callback_data="help_register"),
+    ])
+    
+    # Вторая строка кнопок
+    keyboard.append([
+        InlineKeyboardButton("📊 Мой статус", callback_data="help_status"),
+    ])
+    
+    if is_admin:
+        # Третья строка для админа
+        keyboard.append([
+            InlineKeyboardButton("👑 Админ-панель", callback_data="help_admin"),
+        ])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(help_text, reply_markup=reply_markup)
+
+
+async def help_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик нажатий на кнопки в меню помощи."""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    is_admin = user.id == ADMIN_USER_ID
+    
+    if query.data == "help_about":
+        await query.edit_message_text(ABOUT_TEXT)
+    elif query.data == "help_register":
+        if db.is_registered(user.id):
+            participant = db.get_participant(user.id)
+            text = (
+                f"Ты уже зарегистрирован!\n\n"
+                f"Имя: {participant['full_name']}\n"
+                f"Желаемый подарок: {participant['wish']}\n\n"
+                "Чтобы обновить данные, используй /register"
+            )
+        else:
+            text = (
+                "Для регистрации используй команду /register\n\n"
+                "Тебе нужно будет ввести:\n"
+                "1. Своё полное ФИО\n"
+                "2. Описание желаемого подарка"
+            )
+        await query.edit_message_text(text)
+    elif query.data == "help_status":
+        participant_count = db.get_participant_count()
+        is_assigned = db.is_assignment_done()
+        
+        if is_admin:
+            text = (
+                f"📊 Статус игры:\n\n"
+                f"Участников: {participant_count}\n"
+                f"Распределение: {'Выполнено ✅' if is_assigned else 'Не выполнено ⏳'}\n\n"
+                "Используй /status для подробной информации"
+            )
+        else:
+            if db.is_registered(user.id):
+                participant = db.get_participant(user.id)
+                assignment = db.get_assignment(user.id)
+                text = (
+                    f"Твоя регистрация:\n"
+                    f"Имя: {participant['full_name']}\n"
+                    f"Подарок: {participant['wish']}\n\n"
+                )
+                if assignment:
+                    text += f"🎁 Ты даришь: {assignment['full_name']}"
+                else:
+                    text += "Распределение ещё не выполнено."
+            else:
+                text = "Ты ещё не зарегистрирован. Используй /register"
+        await query.edit_message_text(text)
+    elif query.data == "help_admin":
+        if is_admin:
+            text = (
+                "👑 АДМИНИСТРАТОРСКИЕ КОМАНДЫ:\n\n"
+                "🔹 /assign - Запустить распределение участников\n"
+                "🔹 /export - Выгрузить таблицу участников и подарков\n"
+                "🔹 /status - Показать общий статус игры\n\n"
+                "Используй эти команды для управления игрой."
+            )
+        else:
+            text = "❌ У тебя нет прав администратора."
+        await query.edit_message_text(text)
+
+
 def main():
     """Запуск бота."""
     # Создать приложение
@@ -294,9 +470,13 @@ def main():
     # Добавить обработчики
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("about", about))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("menu", help_command))  # Альтернативная команда для меню
     application.add_handler(register_handler)
     application.add_handler(CommandHandler("assign", assign))
     application.add_handler(CommandHandler("status", status))
+    application.add_handler(CommandHandler("export", export))
+    application.add_handler(CallbackQueryHandler(help_button, pattern="^help_"))
     
     # Запустить бота (long polling)
     logger.info("Бот запущен...")
